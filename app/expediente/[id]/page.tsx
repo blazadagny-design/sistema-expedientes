@@ -8,24 +8,42 @@ export default function ExpedienteDetalle() {
   const params = useParams();
   const id = params?.id as string;
 
+  const [expediente, setExpediente] = useState<any>(null);
   const [documento, setDocumento] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const data: any = {
-    "001-2026": { materia: "Civil", estado: "En trámite" },
-    "002-2026": { materia: "Penal", estado: "Investigación" },
-    "003-2026": { materia: "Laboral", estado: "Apelación" },
-  };
+  // EDIT MODAL STATE
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    materia: "",
+    estado: "",
+  });
 
-  const exp = data[id];
-
-  // 🔵 CARGAR PDF
+  // LOAD DATA
   useEffect(() => {
-    if (id) cargarDocumento();
+    if (id) {
+      cargarExpediente();
+      cargarDocumento();
+    }
   }, [id]);
 
-  const cargarDocumento = async () => {
+  const cargarExpediente = async () => {
     const { data, error } = await supabase
+      .from("expedientes")
+      .select("*")
+      .eq("numero", id)
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setExpediente(data);
+  };
+
+  const cargarDocumento = async () => {
+    const { data } = await supabase
       .from("expediente_documentos")
       .select("*")
       .eq("expediente_id", id)
@@ -37,195 +55,173 @@ export default function ExpedienteDetalle() {
     }
   };
 
-  // 🔵 SUBIR PDF
-  const subirPDF = async (file: File) => {
+  // OPEN EDIT MODAL
+  const openEdit = () => {
+    setEditForm({
+      materia: expediente?.materia || "",
+      estado: expediente?.estado || "",
+    });
+    setIsEditing(true);
+  };
+
+  // SAVE EDIT
+  const saveEdit = async () => {
     setLoading(true);
 
-    const filePath = `${id}/${Date.now()}-${file.name}`;
-
-    // subir archivo
-    const { error: uploadError } = await supabase.storage
+    const { error } = await supabase
       .from("expedientes")
-      .upload(filePath, file);
-
-    if (uploadError) {
-      console.error(uploadError);
-      alert("Error subiendo PDF");
-      setLoading(false);
-      return;
-    }
-
-    // obtener URL pública
-    const { data: publicUrl } = supabase.storage
-      .from("expedientes")
-      .getPublicUrl(filePath);
-
-    // guardar en BD
-    const { data: insertData, error: dbError } = await supabase
-      .from("expediente_documentos")
-      .insert({
-        expediente_id: id,
-        nombre: file.name,
-        url: publicUrl.publicUrl,
-        file_path: filePath,
+      .update({
+        materia: editForm.materia,
+        estado: editForm.estado,
       })
-      .select()
-      .single();
+      .eq("numero", id);
 
-    if (dbError) {
-      console.error(dbError);
-      alert("Error guardando en BD");
+    if (error) {
+      console.error(error);
+      alert("Error actualizando expediente");
       setLoading(false);
       return;
     }
 
-    setDocumento(insertData);
+    await cargarExpediente();
+    setIsEditing(false);
     setLoading(false);
   };
 
-  // 🔴 ELIMINAR PDF
-  const eliminarDocumento = async () => {
-    if (!documento) return;
-
-    const confirmar = confirm(
-      "¿Seguro que deseas eliminar este PDF?"
-    );
-
-    if (!confirmar) return;
-
-    // eliminar storage
-    const { error: storageError } = await supabase.storage
-      .from("expedientes")
-      .remove([documento.file_path]);
-
-    if (storageError) {
-      console.error(storageError);
-      alert("Error eliminando archivo");
-      return;
-    }
-
-    // eliminar BD
-    const { error: dbError } = await supabase
-      .from("expediente_documentos")
-      .delete()
-      .eq("id", documento.id);
-
-    if (dbError) {
-      console.error(dbError);
-      alert("Error eliminando registro");
-      return;
-    }
-
-    alert("Documento eliminado");
-
-    setDocumento(null);
-  };
-
-  if (!exp) {
+  if (!expediente) {
     return (
       <div style={{ padding: 40 }}>
-        <h1>Expediente no encontrado</h1>
+        <h1>⏳ Cargando expediente...</h1>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        padding: 40,
-        background: "#f5f5f5",
-        minHeight: "100vh",
-      }}
-    >
-      <h1>📁 Expediente {id}</h1>
+    <div style={{ padding: 40, background: "#f5f5f5", minHeight: "100vh" }}>
+      <h1>📁 Expediente {expediente.numero}</h1>
 
-      {/* DATOS */}
+      {/* INFO */}
       <div
         style={{
           marginTop: 20,
           padding: 20,
           background: "white",
           borderRadius: 10,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
-        <p>
-          <b>Materia:</b> {exp.materia}
-        </p>
+        <p><b>Materia:</b> {expediente.materia}</p>
+        <p><b>Estado:</b> {expediente.estado}</p>
 
-        <p>
-          <b>Estado:</b> {exp.estado}
-        </p>
-      </div>
-
-      {/* SUBIR PDF */}
-      <div
-        style={{
-          marginTop: 30,
-          padding: 20,
-          background: "white",
-          borderRadius: 10,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-        }}
-      >
-        <h2>📄 Documento del expediente</h2>
-
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-
-            if (file) subirPDF(file);
-          }}
-        />
-
-        {loading && <p>⏳ Subiendo archivo...</p>}
-      </div>
-
-      {/* PDF */}
-      {documento && (
-        <div
+        <button
+          onClick={openEdit}
           style={{
-            marginTop: 30,
-            padding: 20,
-            background: "white",
-            borderRadius: 10,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            marginTop: 10,
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "10px 15px",
+            borderRadius: 8,
+            cursor: "pointer",
           }}
         >
-          <h3>📎 Documento cargado</h3>
+          ✏️ Editar expediente
+        </button>
+      </div>
 
-          <p>{documento.nombre}</p>
-
-          <iframe
-            src={documento.url}
-            width="100%"
-            height="600px"
+      {/* EDIT MODAL */}
+      {isEditing && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <div
             style={{
-              marginTop: 10,
-              border: "1px solid #ddd",
-              borderRadius: 8,
-            }}
-          />
-
-          <button
-            onClick={eliminarDocumento}
-            style={{
-              marginTop: 15,
-              background: "#dc2626",
-              color: "white",
-              border: "none",
-              padding: "12px 18px",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontWeight: "bold",
+              background: "white",
+              padding: 20,
+              borderRadius: 10,
+              width: 400,
             }}
           >
-            🗑 Eliminar PDF
-          </button>
+            <h2>Editar expediente</h2>
+
+            <input
+              placeholder="Materia"
+              value={editForm.materia}
+              onChange={(e) =>
+                setEditForm({ ...editForm, materia: e.target.value })
+              }
+              style={{ width: "100%", padding: 10, marginBottom: 10 }}
+            />
+
+            <input
+              placeholder="Estado"
+              value={editForm.estado}
+              onChange={(e) =>
+                setEditForm({ ...editForm, estado: e.target.value })
+              }
+              style={{ width: "100%", padding: 10, marginBottom: 10 }}
+            />
+
+            <button
+              onClick={saveEdit}
+              style={{
+                background: "green",
+                color: "white",
+                padding: 10,
+                border: "none",
+                borderRadius: 8,
+                width: "100%",
+                marginBottom: 10,
+              }}
+            >
+              💾 Guardar
+            </button>
+
+            <button
+              onClick={() => setIsEditing(false)}
+              style={{
+                background: "gray",
+                color: "white",
+                padding: 10,
+                border: "none",
+                borderRadius: 8,
+                width: "100%",
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
+
+      {/* DOCUMENTO */}
+      <div style={{ marginTop: 30, padding: 20, background: "white", borderRadius: 10 }}>
+        <h2>📄 Documento</h2>
+
+        {documento ? (
+          <>
+            <p>{documento.nombre}</p>
+
+            <iframe
+              src={documento.url}
+              width="100%"
+              height="500px"
+              style={{ marginTop: 10 }}
+            />
+          </>
+        ) : (
+          <p>No hay documento cargado</p>
+        )}
+      </div>
     </div>
   );
 }
