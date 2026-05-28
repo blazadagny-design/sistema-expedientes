@@ -13,49 +13,52 @@ export default function ExpedienteDetalle() {
 
   const [expediente, setExpediente] = useState<any>(null);
   const [documento, setDocumento] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // EDIT MODAL STATE
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     materia: "",
     estado: "",
   });
 
-  // LOAD DATA
+  // 🔵 LOAD EXPEDIENTE
   useEffect(() => {
-    if (id) {
-      cargarExpediente();
-      cargarDocumento();
-    }
+    if (!id) return;
+    cargarExpediente();
   }, [id]);
 
   const cargarExpediente = async () => {
+    setLoading(true);
+
+    const cleanId = id?.trim();
+
     const { data, error } = await supabase
       .from("expedientes")
       .select("*")
-      .eq("numero", id?.trim());
+      .eq("numero", cleanId) // ⚠️ seguimos usando numero porque tu URL es numero
+      .maybeSingle();
 
     if (error) {
       console.error("Error expediente:", error);
       setExpediente(null);
+      setLoading(false);
       return;
     }
 
-    if (!data || data.length === 0) {
-      console.log("No se encontró expediente");
-      setExpediente(null);
-      return;
-    }
+    setExpediente(data);
+    setLoading(false);
 
-    setExpediente(data[0]);
+    if (data?.id) {
+      cargarDocumento(data.id); // ✔ ahora sí correcto
+    }
   };
 
-  const cargarDocumento = async () => {
+  // 🔵 DOCUMENTOS (CORRECTO)
+  const cargarDocumento = async (expId: string) => {
     const { data, error } = await supabase
       .from("expediente_documentos")
       .select("*")
-      .eq("expediente_id", id?.trim())
+      .eq("expediente_id", expId)
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -64,12 +67,10 @@ export default function ExpedienteDetalle() {
       return;
     }
 
-    if (data && data.length > 0) {
-      setDocumento(data[0]);
-    }
+    setDocumento(data?.[0] || null);
   };
 
-  // OPEN EDIT MODAL
+  // 🔵 EDIT
   const openEdit = () => {
     setEditForm({
       materia: expediente?.materia || "",
@@ -78,7 +79,6 @@ export default function ExpedienteDetalle() {
     setIsEditing(true);
   };
 
-  // SAVE EDIT
   const saveEdit = async () => {
     setLoading(true);
 
@@ -88,7 +88,7 @@ export default function ExpedienteDetalle() {
         materia: editForm.materia,
         estado: editForm.estado,
       })
-      .eq("numero", id?.trim());
+      .eq("numero", id);
 
     if (error) {
       console.error(error);
@@ -102,18 +102,20 @@ export default function ExpedienteDetalle() {
     setLoading(false);
   };
 
-  if (!id) {
+  // 🔵 LOADING STATE
+  if (loading) {
     return (
       <div style={{ padding: 40 }}>
-        <h1>❌ ID inválido</h1>
+        <h1>⏳ Cargando expediente...</h1>
       </div>
     );
   }
 
+  // 🔵 NOT FOUND
   if (!expediente) {
     return (
       <div style={{ padding: 40 }}>
-        <h1>⏳ Cargando expediente...</h1>
+        <h1>❌ Expediente no encontrado</h1>
       </div>
     );
   }
@@ -122,123 +124,22 @@ export default function ExpedienteDetalle() {
     <div style={{ padding: 40, background: "#f5f5f5", minHeight: "100vh" }}>
       <h1>📁 Expediente {expediente.numero}</h1>
 
-      {/* INFO */}
-      <div
-        style={{
-          marginTop: 20,
-          padding: 20,
-          background: "white",
-          borderRadius: 10,
-        }}
-      >
+      <div style={{ marginTop: 20, padding: 20, background: "white", borderRadius: 10 }}>
         <p><b>Materia:</b> {expediente.materia}</p>
         <p><b>Estado:</b> {expediente.estado}</p>
 
-        <button
-          onClick={openEdit}
-          style={{
-            marginTop: 10,
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            padding: "10px 15px",
-            borderRadius: 8,
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={openEdit}>
           ✏️ Editar expediente
         </button>
       </div>
 
-      {/* EDIT MODAL */}
-      {isEditing && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: 20,
-              borderRadius: 10,
-              width: 400,
-            }}
-          >
-            <h2>Editar expediente</h2>
-
-            <input
-              placeholder="Materia"
-              value={editForm.materia}
-              onChange={(e) =>
-                setEditForm({ ...editForm, materia: e.target.value })
-              }
-              style={{ width: "100%", padding: 10, marginBottom: 10 }}
-            />
-
-            <input
-              placeholder="Estado"
-              value={editForm.estado}
-              onChange={(e) =>
-                setEditForm({ ...editForm, estado: e.target.value })
-              }
-              style={{ width: "100%", padding: 10, marginBottom: 10 }}
-            />
-
-            <button
-              onClick={saveEdit}
-              style={{
-                background: "green",
-                color: "white",
-                padding: 10,
-                border: "none",
-                borderRadius: 8,
-                width: "100%",
-                marginBottom: 10,
-              }}
-            >
-              💾 Guardar
-            </button>
-
-            <button
-              onClick={() => setIsEditing(false)}
-              style={{
-                background: "gray",
-                color: "white",
-                padding: 10,
-                border: "none",
-                borderRadius: 8,
-                width: "100%",
-              }}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* DOCUMENTO */}
       <div style={{ marginTop: 30, padding: 20, background: "white", borderRadius: 10 }}>
         <h2>📄 Documento</h2>
 
         {documento ? (
           <>
             <p>{documento.nombre}</p>
-
-            <iframe
-              src={documento.url}
-              width="100%"
-              height="500px"
-              style={{ marginTop: 10 }}
-            />
+            <iframe src={documento.url} width="100%" height="500px" />
           </>
         ) : (
           <p>No hay documento cargado</p>
