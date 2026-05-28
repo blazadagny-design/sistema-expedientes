@@ -19,7 +19,7 @@ export default function ExpedienteDetalle() {
 
   const exp = data[id];
 
-  // 🔵 CARGAR PDF AL ENTRAR
+  // 🔵 CARGAR PDF
   useEffect(() => {
     if (id) cargarDocumento();
   }, [id]);
@@ -43,34 +43,37 @@ export default function ExpedienteDetalle() {
 
     const filePath = `${id}/${Date.now()}-${file.name}`;
 
-    // 1. Subir a Storage
+    // subir archivo
     const { error: uploadError } = await supabase.storage
       .from("expedientes")
       .upload(filePath, file);
 
     if (uploadError) {
+      console.error(uploadError);
       alert("Error subiendo PDF");
       setLoading(false);
       return;
     }
 
-    // 2. Obtener URL pública
+    // obtener URL pública
     const { data: publicUrl } = supabase.storage
       .from("expedientes")
       .getPublicUrl(filePath);
 
-    // 3. Guardar en base de datos
+    // guardar en BD
     const { data: insertData, error: dbError } = await supabase
       .from("expediente_documentos")
       .insert({
         expediente_id: id,
         nombre: file.name,
         url: publicUrl.publicUrl,
+        file_path: filePath,
       })
       .select()
       .single();
 
     if (dbError) {
+      console.error(dbError);
       alert("Error guardando en BD");
       setLoading(false);
       return;
@@ -78,6 +81,44 @@ export default function ExpedienteDetalle() {
 
     setDocumento(insertData);
     setLoading(false);
+  };
+
+  // 🔴 ELIMINAR PDF
+  const eliminarDocumento = async () => {
+    if (!documento) return;
+
+    const confirmar = confirm(
+      "¿Seguro que deseas eliminar este PDF?"
+    );
+
+    if (!confirmar) return;
+
+    // eliminar storage
+    const { error: storageError } = await supabase.storage
+      .from("expedientes")
+      .remove([documento.file_path]);
+
+    if (storageError) {
+      console.error(storageError);
+      alert("Error eliminando archivo");
+      return;
+    }
+
+    // eliminar BD
+    const { error: dbError } = await supabase
+      .from("expediente_documentos")
+      .delete()
+      .eq("id", documento.id);
+
+    if (dbError) {
+      console.error(dbError);
+      alert("Error eliminando registro");
+      return;
+    }
+
+    alert("Documento eliminado");
+
+    setDocumento(null);
   };
 
   if (!exp) {
@@ -89,7 +130,13 @@ export default function ExpedienteDetalle() {
   }
 
   return (
-    <div style={{ padding: 40 }}>
+    <div
+      style={{
+        padding: 40,
+        background: "#f5f5f5",
+        minHeight: "100vh",
+      }}
+    >
       <h1>📁 Expediente {id}</h1>
 
       {/* DATOS */}
@@ -99,18 +146,28 @@ export default function ExpedienteDetalle() {
           padding: 20,
           background: "white",
           borderRadius: 10,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
         <p>
           <b>Materia:</b> {exp.materia}
         </p>
+
         <p>
           <b>Estado:</b> {exp.estado}
         </p>
       </div>
 
-      {/* SUBIDA PDF */}
-      <div style={{ marginTop: 30 }}>
+      {/* SUBIR PDF */}
+      <div
+        style={{
+          marginTop: 30,
+          padding: 20,
+          background: "white",
+          borderRadius: 10,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        }}
+      >
         <h2>📄 Documento del expediente</h2>
 
         <input
@@ -118,6 +175,7 @@ export default function ExpedienteDetalle() {
           accept="application/pdf"
           onChange={(e) => {
             const file = e.target.files?.[0];
+
             if (file) subirPDF(file);
           }}
         />
@@ -125,18 +183,47 @@ export default function ExpedienteDetalle() {
         {loading && <p>⏳ Subiendo archivo...</p>}
       </div>
 
-      {/* VISUALIZAR PDF */}
+      {/* PDF */}
       {documento && (
-        <div style={{ marginTop: 30 }}>
-          <h3>📎 Documento cargado:</h3>
+        <div
+          style={{
+            marginTop: 30,
+            padding: 20,
+            background: "white",
+            borderRadius: 10,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          }}
+        >
+          <h3>📎 Documento cargado</h3>
+
           <p>{documento.nombre}</p>
 
           <iframe
             src={documento.url}
             width="100%"
             height="600px"
-            style={{ marginTop: 10, border: "1px solid #ddd" }}
+            style={{
+              marginTop: 10,
+              border: "1px solid #ddd",
+              borderRadius: 8,
+            }}
           />
+
+          <button
+            onClick={eliminarDocumento}
+            style={{
+              marginTop: 15,
+              background: "#dc2626",
+              color: "white",
+              border: "none",
+              padding: "12px 18px",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            🗑 Eliminar PDF
+          </button>
         </div>
       )}
     </div>
