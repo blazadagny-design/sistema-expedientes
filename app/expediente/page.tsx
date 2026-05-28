@@ -1,31 +1,47 @@
 "use client";
-import { useRouter } from "next/navigation";
 
-const expedientes = [
-  {
-    id: "001-2026",
-    materia: "Civil",
-    estado: "Admisión de demanda",
-    juzgado: "2° Juzgado Civil de Puno",
-    fecha: "2026-01-10",
-    demandante: "Juan Pérez",
-    demandado: "María Quispe",
-    etapa: "Postulatoria",
-  },
-  {
-    id: "002-2026",
-    materia: "Penal",
-    estado: "Investigación preliminar",
-    juzgado: "Fiscalía Provincial Penal",
-    fecha: "2026-02-03",
-    demandante: "Ministerio Público",
-    demandado: "Carlos Mamani",
-    etapa: "Investigación",
-  },
-];
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Expediente() {
   const router = useRouter();
+
+  const [expedientes, setExpedientes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const cargarExpedientes = async () => {
+    const { data, error } = await supabase
+      .from("expedientes")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setExpedientes(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    cargarExpedientes();
+
+    const interval = setInterval(() => {
+      cargarExpedientes();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h1>⏳ Cargando expedientes...</h1>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 40 }}>
@@ -44,12 +60,9 @@ export default function Expediente() {
               border: "1px solid #ddd",
             }}
           >
-            <h3>📁 {exp.id}</h3>
+            <h3>📁 {exp.numero}</h3>
             <p><b>Materia:</b> {exp.materia}</p>
             <p><b>Estado:</b> {exp.estado}</p>
-            <p><b>Etapa:</b> {exp.etapa}</p>
-            <p><b>Juzgado:</b> {exp.juzgado}</p>
-            <p><b>Fecha:</b> {exp.fecha}</p>
           </div>
         ))}
       </div>

@@ -6,7 +6,10 @@ import { supabase } from "@/lib/supabase";
 
 export default function ExpedienteDetalle() {
   const params = useParams();
-  const id = params?.id as string;
+
+  const id = Array.isArray(params?.id)
+    ? params.id[0]
+    : (params?.id as string);
 
   const [expediente, setExpediente] = useState<any>(null);
   const [documento, setDocumento] = useState<any>(null);
@@ -31,24 +34,35 @@ export default function ExpedienteDetalle() {
     const { data, error } = await supabase
       .from("expedientes")
       .select("*")
-      .eq("numero", id)
-      .single();
+      .eq("numero", id?.trim());
 
     if (error) {
-      console.error(error);
+      console.error("Error expediente:", error);
+      setExpediente(null);
       return;
     }
 
-    setExpediente(data);
+    if (!data || data.length === 0) {
+      console.log("No se encontró expediente");
+      setExpediente(null);
+      return;
+    }
+
+    setExpediente(data[0]);
   };
 
   const cargarDocumento = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("expediente_documentos")
       .select("*")
-      .eq("expediente_id", id)
+      .eq("expediente_id", id?.trim())
       .order("created_at", { ascending: false })
       .limit(1);
+
+    if (error) {
+      console.error("Error documento:", error);
+      return;
+    }
 
     if (data && data.length > 0) {
       setDocumento(data[0]);
@@ -74,7 +88,7 @@ export default function ExpedienteDetalle() {
         materia: editForm.materia,
         estado: editForm.estado,
       })
-      .eq("numero", id);
+      .eq("numero", id?.trim());
 
     if (error) {
       console.error(error);
@@ -87,6 +101,14 @@ export default function ExpedienteDetalle() {
     setIsEditing(false);
     setLoading(false);
   };
+
+  if (!id) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h1>❌ ID inválido</h1>
+      </div>
+    );
+  }
 
   if (!expediente) {
     return (
